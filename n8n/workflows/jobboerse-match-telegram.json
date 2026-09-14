@@ -1,0 +1,174 @@
+[
+  {
+    "id": "jobboerse-match-telegram",
+    "name": "Jobbörse beobachten -> match_job_posting -> Telegram",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": { "interval": [{ "field": "minutes", "minutesInterval": 30 }] }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [0, 0],
+        "id": "trigger-schedule",
+        "name": "Alle 30 Minuten"
+      },
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [0, 160],
+        "id": "trigger-manual",
+        "name": "Manuell ausführen"
+      },
+      {
+        "parameters": {
+          "url": "https://weworkremotely.com/categories/remote-programming-jobs.rss"
+        },
+        "type": "n8n-nodes-base.rssFeedRead",
+        "typeVersion": 1.2,
+        "position": [224, 80],
+        "id": "rss-read",
+        "name": "RSS Feed Read"
+      },
+      {
+        "parameters": { "maxItems": 3, "keep": "firstItems" },
+        "type": "n8n-nodes-base.limit",
+        "typeVersion": 1,
+        "position": [336, 80],
+        "id": "limit-items",
+        "name": "Nur die ersten 3 (Groq-Free-Tier-TPM-Limit)"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "assign-resume",
+                "name": "resumeText",
+                "type": "string",
+                "value": "TODO: Hier deinen echten Lebenslauf als Fließtext eintragen (z.B. Name, Erfahrung, Skills) - siehe README."
+              },
+              {
+                "id": "assign-name",
+                "name": "applicantName",
+                "type": "string",
+                "value": "TODO: Dein Name"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [448, 80],
+        "id": "set-lebenslauf",
+        "name": "Lebenslauf"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://host.docker.internal:3100/auth/login",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ username: \"testuser\", password: \"test-passwort\" }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [672, 80],
+        "id": "http-login",
+        "name": "Login"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://host.docker.internal:3100/job-postings/match",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $node[\"Login\"].json.accessToken }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ postingText: ($node[\"RSS Feed Read\"].json.contentSnippet || $node[\"RSS Feed Read\"].json.content || \"\") + \"\\n\\n\" + $node[\"RSS Feed Read\"].json.title, resumeText: $node[\"Lebenslauf\"].json.resumeText }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [896, 80],
+        "id": "http-match",
+        "name": "match_job_posting"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "const requirements = $json.requirements || [];\nconst total = requirements.length;\nconst matchedCount = requirements.filter((r) => r.matched).length;\nconst ratio = total > 0 ? matchedCount / total : 0;\nreturn {\n  json: {\n    company: $json.company,\n    jobTitle: $json.jobTitle,\n    summary: $json.summary,\n    matchedCount,\n    total,\n    ratio,\n    link: $node[\"RSS Feed Read\"].json.link,\n  },\n};"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1120, 80],
+        "id": "code-bewertung",
+        "name": "Bewertung"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "cond-ratio",
+                "leftValue": "={{ $json.ratio }}",
+                "rightValue": 0.5,
+                "operator": { "type": "number", "operation": "gte" }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [1344, 80],
+        "id": "if-treffer",
+        "name": "Guter Treffer?"
+      },
+      {
+        "parameters": {
+          "resource": "message",
+          "operation": "sendMessage",
+          "chatId": "TODO_TELEGRAM_CHAT_ID",
+          "text": "=Neuer Treffer: {{ $json.jobTitle }} bei {{ $json.company }} ({{ $json.matchedCount }}/{{ $json.total }} Anforderungen erfüllt)\n\n{{ $json.summary }}\n\n{{ $json.link }}",
+          "additionalFields": {}
+        },
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [1568, 0],
+        "id": "telegram-notify",
+        "name": "Telegram-Nachricht",
+        "credentials": {
+          "telegramApi": {
+            "id": "telegram-bewerbungshelfer",
+            "name": "Bewerbungshelfer Telegram Bot"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Alle 30 Minuten": { "main": [[{ "node": "RSS Feed Read", "type": "main", "index": 0 }]] },
+      "Manuell ausführen": { "main": [[{ "node": "RSS Feed Read", "type": "main", "index": 0 }]] },
+      "RSS Feed Read": { "main": [[{ "node": "Nur die ersten 3 (Groq-Free-Tier-TPM-Limit)", "type": "main", "index": 0 }]] },
+      "Nur die ersten 3 (Groq-Free-Tier-TPM-Limit)": { "main": [[{ "node": "Lebenslauf", "type": "main", "index": 0 }]] },
+      "Lebenslauf": { "main": [[{ "node": "Login", "type": "main", "index": 0 }]] },
+      "Login": { "main": [[{ "node": "match_job_posting", "type": "main", "index": 0 }]] },
+      "match_job_posting": { "main": [[{ "node": "Bewertung", "type": "main", "index": 0 }]] },
+      "Bewertung": { "main": [[{ "node": "Guter Treffer?", "type": "main", "index": 0 }]] },
+      "Guter Treffer?": { "main": [[{ "node": "Telegram-Nachricht", "type": "main", "index": 0 }], []] }
+    },
+    "settings": { "executionOrder": "v1" }
+  }
+]
