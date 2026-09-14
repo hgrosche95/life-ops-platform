@@ -1,0 +1,39 @@
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: life-ops-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  # Referenziert das in ai-trip-planer/.github/workflows/deploy.yml gebaute
+  # GHCR-Image statt hier lokal zu bauen - dieses Repo ist nur das "Dach",
+  # Build/CI bleiben Sache des Fachprojekts. Der Tag ist der Commit-SHA von
+  # main zum Zeitpunkt dieser Änderung: die CI pusht aktuell ausschließlich
+  # SHA-Tags (kein :latest), der Tag muss also von Hand nachgezogen werden,
+  # wenn sich ai-trip-planer ändert.
+  api:
+    image: ghcr.io/hgrosche95/ai-trip-planner-api:9ca39cbddd75ef86282459bea41d9e5fcdf83753
+    container_name: life-ops-ai-trip-planner-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # JwtStrategy wirft beim Start eine Exception, wenn JWT_SECRET fehlt
+      # (siehe apps/api/src/auth/jwt.strategy.ts) - ohne Auth-Nutzung reicht
+      # hier ein beliebiger Platzhalterwert. DATABASE_URL bleibt bewusst
+      # ungesetzt: Prisma liest sie erst lazy pro Query, /health meldet dann
+      # database:"unreachable" statt "connected", bleibt aber ein
+      # erfolgreicher 200er-Aufruf.
+      JWT_SECRET: local-dev-placeholder
+      # GroqProvider baut beim Start einen OpenAI-SDK-Client mit diesem Key
+      # (apps/api/src/llm/groq.provider.ts) - das SDK prüft nur, dass
+      # überhaupt ein Wert da ist, nicht ob er gültig ist. Ohne ihn crasht
+      # der Container in einer Neustart-Schleife, noch bevor /health
+      # überhaupt erreichbar ist.
+      GROQ_API_KEY: local-dev-placeholder
+
+volumes:
+  n8n_data:
