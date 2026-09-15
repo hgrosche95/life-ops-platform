@@ -97,3 +97,63 @@ gelaufen - alle vier korrekt als unverändert übersprungen (`skipped`), keine
 Embedding-Kosten. Die eigentliche "neu"/"aktualisiert"-Logik ist identischer
 Code zur bereits in Phase 2 getesteten CLI (`rag-ingest`), hier zusätzlich
 über den neuen `/ingest`-HTTP-Endpunkt bestätigt erreichbar.
+
+## langfuse-usage-warning.json
+
+Fragt täglich Langfuses Metrics-API ab und schickt eine Telegram-Warnung,
+wenn die geschätzte monatliche Nutzung ≥80% des Free-Tier-Limits (50.000
+Units) erreicht.
+
+**Wie die Auslastung berechnet wird:** Langfuse hat (Stand 2026) keinen
+dedizierten "aktuelle Nutzung vs. Limit"-Endpunkt - das ist sogar ein offener
+Feature-Request in ihrem GitHub. Laut ihrer eigenen Definition ist 1 Unit =
+1 Trace + 1 Observation + 1 Score pro Abrechnungszeitraum. Der Workflow bildet
+das über die v2-Metrics-API selbst nach:
+
+```
+GET /api/public/v2/metrics?query={
+  "view": "observations",
+  "metrics": [
+    {"measure": "traceId", "aggregation": "uniq"},
+    {"measure": "count", "aggregation": "count"},
+    {"measure": "countScores", "aggregation": "sum"}
+  ],
+  "fromTimestamp": "<Monatserster 00:00 UTC>",
+  "toTimestamp": "<jetzt>"
+}
+```
+
+Gültige `view`/`measure`/`aggregation`-Werte sind in Langfuses Doku kaum
+auffindbar - ermittelt, indem bewusst ungültige Werte geschickt wurden: die
+Fehlermeldung zählt jeweils alle gültigen Optionen auf.
+
+**Das ist eine Annäherung, keine garantiert exakte Langfuse-Kennzahl** - so
+auch in der Telegram-Nachricht selbst formuliert, damit die Warnung nicht als
+offizielle Zahl missverstanden wird.
+
+### Import
+
+```bash
+docker cp langfuse-usage-warning.json life-ops-n8n:/tmp/workflow.json
+docker exec life-ops-n8n n8n import:workflow --input=/tmp/workflow.json
+```
+
+### Vor dem ersten echten Lauf einzustellen
+
+- **Node "Telegram-Warnung"**: `chatId` eintragen (`TODO_TELEGRAM_CHAT_ID`),
+  Credential **Bewerbungshelfer Telegram Bot** wiederverwendet (siehe oben).
+- **Credential "Langfuse Basic Auth"** (`langfuse-basic-auth`) per CLI anlegen:
+  ```bash
+  echo '[{"id":"langfuse-basic-auth","name":"Langfuse Basic Auth","type":"httpBasicAuth","data":{"user":"<PUBLIC_KEY>","password":"<SECRET_KEY>"}}]' > cred.json
+  docker cp cred.json life-ops-n8n:/tmp/cred.json
+  docker exec life-ops-n8n n8n import:credentials --input=/tmp/cred.json
+  ```
+- Bei US-Region-Projekt die URL im "Langfuse Nutzung abfragen"-Node von
+  `cloud.langfuse.com` auf `us.cloud.langfuse.com` ändern.
+
+### Getestet
+
+Mit echten Langfuse-Keys end-to-end gelaufen: `units: 0` bei leerem Projekt
+(korrekt, kein voreiliges `warn`), danach mit künstlich auf `true` gesetztem
+`warn` erneut gelaufen, um den Telegram-Zweig zu beweisen - echte Nachricht
+kam an. Danach beide Testwerte (`warn`, `chatId`) wieder zurückgesetzt.

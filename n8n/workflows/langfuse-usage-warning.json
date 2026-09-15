@@ -1,0 +1,128 @@
+[
+  {
+    "id": "langfuse-usage-warning",
+    "name": "Langfuse-Nutzung beobachten -> Telegram-Warnung",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": { "interval": [{ "field": "days", "daysInterval": 1 }] }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [0, 0],
+        "id": "trigger-schedule",
+        "name": "Täglich"
+      },
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [0, 160],
+        "id": "trigger-manual",
+        "name": "Manuell ausführen"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const now = new Date();\nconst fromTimestamp = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();\nconst toTimestamp = now.toISOString();\nreturn [{ json: { fromTimestamp, toTimestamp } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [224, 80],
+        "id": "code-zeitraum",
+        "name": "Zeitraum berechnen"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "https://cloud.langfuse.com/api/public/v2/metrics",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpBasicAuth",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "query",
+                "value": "={{ JSON.stringify({ view: \"observations\", metrics: [{ measure: \"traceId\", aggregation: \"uniq\" }, { measure: \"count\", aggregation: \"count\" }, { measure: \"countScores\", aggregation: \"sum\" }], dimensions: [], filters: [], fromTimestamp: $json.fromTimestamp, toTimestamp: $json.toTimestamp }) }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [448, 80],
+        "id": "http-langfuse-metrics",
+        "name": "Langfuse Nutzung abfragen",
+        "credentials": {
+          "httpBasicAuth": {
+            "id": "langfuse-basic-auth",
+            "name": "Langfuse Basic Auth"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "// Langfuse hat keinen dedizierten \"aktuelle Auslastung\"-Endpunkt (Stand 2026,\n// offener Feature-Request). Eigene Annäherung an ihre Unit-Definition:\n// 1 Unit = 1 Trace + 1 Observation + 1 Score, siehe README.\nconst row = ($input.first().json.data || [])[0] || {};\nconst traces = Number(row.uniq_traceId || 0);\nconst observations = Number(row.count_count || 0);\nconst scores = Number(row.sum_countScores || 0);\nconst units = traces + observations + scores;\nconst limit = 50000;\nconst ratio = units / limit;\nreturn [{\n  json: { traces, observations, scores, units, limit, ratio, warn: ratio >= 0.8 },\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [672, 80],
+        "id": "code-auslastung",
+        "name": "Auslastung berechnen"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "cond-warn",
+                "leftValue": "={{ $json.warn }}",
+                "rightValue": true,
+                "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [896, 80],
+        "id": "if-warn",
+        "name": "Nahe am Limit?"
+      },
+      {
+        "parameters": {
+          "resource": "message",
+          "operation": "sendMessage",
+          "chatId": "TODO_TELEGRAM_CHAT_ID",
+          "text": "=⚠️ Langfuse-Nutzung bei {{ Math.round($json.ratio * 100) }}% des monatlichen Free-Tier-Limits ({{ $json.units }}/{{ $json.limit }} Units, Stand jetzt). Näherungswert (Traces {{ $json.traces }} + Observations {{ $json.observations }} + Scores {{ $json.scores }}), keine offizielle Langfuse-Kennzahl.",
+          "additionalFields": {}
+        },
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [1120, 0],
+        "id": "telegram-warn",
+        "name": "Telegram-Warnung",
+        "credentials": {
+          "telegramApi": {
+            "id": "telegram-bewerbungshelfer",
+            "name": "Bewerbungshelfer Telegram Bot"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Täglich": { "main": [[{ "node": "Zeitraum berechnen", "type": "main", "index": 0 }]] },
+      "Manuell ausführen": { "main": [[{ "node": "Zeitraum berechnen", "type": "main", "index": 0 }]] },
+      "Zeitraum berechnen": { "main": [[{ "node": "Langfuse Nutzung abfragen", "type": "main", "index": 0 }]] },
+      "Langfuse Nutzung abfragen": { "main": [[{ "node": "Auslastung berechnen", "type": "main", "index": 0 }]] },
+      "Auslastung berechnen": { "main": [[{ "node": "Nahe am Limit?", "type": "main", "index": 0 }]] },
+      "Nahe am Limit?": { "main": [[{ "node": "Telegram-Warnung", "type": "main", "index": 0 }], []] }
+    },
+    "settings": { "executionOrder": "v1" }
+  }
+]
