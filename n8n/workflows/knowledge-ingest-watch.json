@@ -1,0 +1,46 @@
+[
+  {
+    "id": "knowledge-ingest-watch",
+    "name": "data/knowledge beobachten -> rag-ingest anstoßen",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": { "interval": [{ "field": "hours", "hoursInterval": 1 }] }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [0, 0],
+        "id": "trigger-schedule",
+        "name": "Stündlich"
+      },
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [0, 160],
+        "id": "trigger-manual",
+        "name": "Manuell ausführen"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://host.docker.internal:8001/ingest",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ collection: \"travel\" }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [224, 80],
+        "id": "http-ingest",
+        "name": "rag-ingest anstoßen"
+      }
+    ],
+    "connections": {
+      "Stündlich": { "main": [[{ "node": "rag-ingest anstoßen", "type": "main", "index": 0 }]] },
+      "Manuell ausführen": { "main": [[{ "node": "rag-ingest anstoßen", "type": "main", "index": 0 }]] }
+    },
+    "settings": { "executionOrder": "v1" }
+  }
+]

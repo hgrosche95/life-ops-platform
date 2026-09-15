@@ -56,3 +56,44 @@ Einmal end-to-end mit echtem RSS-Feed, echtem LLM-Abgleich (Groq) und echtem
 Telegram-Versand gelaufen - zwei von drei Testanzeigen überschritten die
 Schwelle, beide Nachrichten kamen an. Danach Chat-ID und Lebenslauf-Felder
 wieder auf Platzhalter zurückgesetzt, bevor committet wurde.
+
+## knowledge-ingest-watch.json
+
+Stößt stündlich (und manuell) `POST /ingest` im `ai-trip-planer`-RAG-Service
+an (`services/rag`, Branch `feat/rag-collections`).
+
+**Warum kein echter Commit-Check gegen die GitHub-API:** Ursprünglich gebaut
+mit `GET /repos/.../commits?path=data/knowledge`, einem Code-Node, der den
+neuesten Commit-SHA mit `$getWorkflowStaticData('global')` gegen den vorigen
+Lauf verglich, und einem IF-Node davor. Live getestet (Workflow aktiviert,
+6 automatische Läufe im 1-Minuten-Takt beobachtet, direkt in der n8n-SQLite-
+DB nachgesehen): `staticData` blieb bei jedem Lauf `null` - diese n8n-Version
+(2.38.7) hat ein neueres, anderes internes Versionierungssystem
+(`workflow_published_version`-Tabelle), in dem die klassische
+`$getWorkflowStaticData`-Persistenz zwischen Läufen nicht wie erwartet
+funktioniert.
+
+Der Ersatz braucht keinen Zustand: `ingest_knowledge_base()`
+(`services/rag/src/rag_service/ingest.py`) vergleicht pro Datei ohnehin einen
+sha256-Hash und überspringt Unverändertes - ein stündlicher unbedingter
+`/ingest`-Aufruf ist dadurch bereits günstig und sicher (kein Embedding-Aufruf
+bei keiner Änderung), ohne von einem n8n-internen Mechanismus abzuhängen.
+
+### Import
+
+```bash
+docker cp knowledge-ingest-watch.json life-ops-n8n:/tmp/workflow.json
+docker exec life-ops-n8n n8n import:workflow --input=/tmp/workflow.json
+```
+
+Geht davon aus, dass `services/rag` nativ auf dem Host auf Port 8001 läuft
+(`uv run uvicorn rag_service.main:app --port 8001`) - `host.docker.internal`
+im HTTP-Request-Node erreicht den Host aus dem n8n-Container heraus.
+
+### Getestet
+
+Per `n8n execute` gegen die echte lokale Wissensbasis (4 Reiseziel-Dokumente)
+gelaufen - alle vier korrekt als unverändert übersprungen (`skipped`), keine
+Embedding-Kosten. Die eigentliche "neu"/"aktualisiert"-Logik ist identischer
+Code zur bereits in Phase 2 getesteten CLI (`rag-ingest`), hier zusätzlich
+über den neuen `/ingest`-HTTP-Endpunkt bestätigt erreichbar.
