@@ -157,3 +157,76 @@ Mit echten Langfuse-Keys end-to-end gelaufen: `units: 0` bei leerem Projekt
 (korrekt, kein voreiliges `warn`), danach mit künstlich auf `true` gesetztem
 `warn` erneut gelaufen, um den Telegram-Zweig zu beweisen - echte Nachricht
 kam an. Danach beide Testwerte (`warn`, `chatId`) wieder zurückgesetzt.
+
+## publish-platform-status.json
+
+Sammelt täglich (und manuell) das letzte Ergebnis der drei obigen Workflows
+über n8ns eigene Executions-API und committet eine Zusammenfassung als
+`src/data/platform-status.json` in `portfolio-page` - Grundlage für ein
+Status-Widget auf der `life-ops-platform`-Projektseite.
+
+**Warum ein einzelner Aggregator statt dass jeder Workflow selbst committet:**
+Ein Commit nach `portfolio-page`s `main` löst über `deploy.yml` ein volles
+Rebuild/Redeploy der Seite aus. Drei unabhängige Schreiber hätten Merge-
+Konflikt-Risiko und ein Redeploy bei jedem RSS-/Stunden-/Tages-Lauf bedeutet.
+Ein Aggregator-Lauf pro Tag heißt: ein kontrollierter Redeploy-Rhythmus, ein
+GitHub-Schreibrecht (fein-granularer PAT, nur `contents:write` auf
+`portfolio-page`) statt drei.
+
+**Wie das letzte Ergebnis pro Workflow ausgelesen wird:** `GET
+/api/v1/executions?workflowId=...&limit=1&includeData=true` liefert die
+komplette letzte Ausführung inklusive `data.resultData.runData` - ein Objekt
+pro Node-Name mit dessen Output-Historie. Verifiziert gegen echte
+Ausführungen (2026-09-16): `runData[nodeName]` ist ein Array von *Läufen*
+dieses Nodes, nicht ein Array pro Item. Pro Ziel-Workflow wird der Output
+eines bestimmten, bekannten Nodes ausgelesen (`Bewertung` bei
+`jobboerse-match-telegram`, `rag-ingest anstoßen` bei
+`knowledge-ingest-watch`, `Auslastung berechnen` bei
+`langfuse-usage-warning`) und daraus ein Klartext-Ergebnis gebaut - keine
+n8n-internen IDs oder Rohdaten im Widget.
+
+**Erstanlage vs. Update:** `GET .../contents/src/data/platform-status.json`
+liefert beim allerersten Lauf einen 404 (Datei existiert noch nicht) -
+`neverError: true` verhindert, dass das den Workflow abbricht, und der
+`PUT`-Body lässt `sha` dann einfach weg (legt die Datei neu an). Bei jedem
+weiteren Lauf liefert derselbe GET ein `sha`, das der `PUT` mitschicken muss,
+sonst lehnt GitHub das Update ab.
+
+### Import
+
+```bash
+docker cp publish-platform-status.json life-ops-n8n:/tmp/workflow.json
+docker exec life-ops-n8n n8n import:workflow --input=/tmp/workflow.json
+```
+
+### Vor dem ersten echten Lauf einzustellen
+
+- **Credential "n8n API Key"** (`n8n-api-key`, `httpHeaderAuth`): ein n8n-API-
+  Key aus dem n8n-UI (Settings → n8n API), als `Authorization: Bearer <KEY>`.
+  ```bash
+  echo '[{"id":"n8n-api-key","name":"n8n API Key","type":"httpHeaderAuth","data":{"name":"Authorization","value":"Bearer <KEY>"}}]' > cred.json
+  docker cp cred.json life-ops-n8n:/tmp/cred.json
+  docker exec life-ops-n8n n8n import:credentials --input=/tmp/cred.json
+  ```
+- **Credential "GitHub PAT (portfolio-page)"** (`github-portfolio-pat`,
+  `httpHeaderAuth`): ein fein-granularer GitHub-PAT, nur für `portfolio-page`
+  freigegeben, nur `Contents: Read and write`.
+  ```bash
+  echo '[{"id":"github-portfolio-pat","name":"GitHub PAT (portfolio-page)","type":"httpHeaderAuth","data":{"name":"Authorization","value":"Bearer <PAT>"}}]' > cred.json
+  docker cp cred.json life-ops-n8n:/tmp/cred.json
+  docker exec life-ops-n8n n8n import:credentials --input=/tmp/cred.json
+  ```
+- Geht davon aus, dass der n8n-Server selbst unter
+  `http://host.docker.internal:5678` erreichbar ist - anders als bei den
+  anderen drei Workflows braucht dieser hier also den laufenden Server
+  während des Tests (`docker compose run --rm n8n execute` reicht nicht,
+  wenn der Server währenddessen gestoppt ist).
+
+### Getestet
+
+Per `n8n execute` bei laufendem Server end-to-end gelaufen: alle drei
+Ziel-Workflows lieferten ihr echtes letztes Ergebnis (u.a. "3 Anzeigen
+geprüft, bester Treffer 5/5 bei Huzzle"), `SHA abrufen` traf den erwarteten
+404 (Datei existierte noch nicht), `Committen` erzeugte einen echten Commit
+in `portfolio-page` mit korrekter Parent-SHA. Die Erstanlage von
+`src/data/platform-status.json` ist damit dieser Testlauf selbst.
