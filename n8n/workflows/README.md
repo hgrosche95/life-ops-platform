@@ -1,6 +1,6 @@
 # n8n-Workflows
 
-Als JSON exportierte n8n-Workflows (Phase 3, siehe `PLAN.md`). Jeder Workflow
+Als JSON exportierte n8n-Workflows (Überblick in der [README](../../README.md)). Jeder Workflow
 wurde per n8n-CLI importiert und einmal end-to-end ausgeführt, bevor er hier
 committet wurde - kein unbestätigter Code.
 
