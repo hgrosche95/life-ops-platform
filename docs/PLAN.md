@@ -1,5 +1,10 @@
 # life-ops-platform — Bauplan
 
+> Ursprünglicher Plan aus der Entstehung des Projekts, nicht der Ist-Zustand.
+> Abweichungen: `agentic-rogue-like` wurde kein integrierter Dienst, sondern nur
+> Ideengeber für den Validierungs-Loop. Den aktuellen Stand beschreibt die
+> [README](../README.md).
+
 Dach über drei bestehende Repos: ai-trip-planner, job-application-skill,
 agentic-rogue-like. Zwei Zugänge (Claude per MCP, n8n per REST) zu drei
 Fachdiensten, die eine RAG-Basis, eine Postgres, ein Langfuse-Projekt teilen.
