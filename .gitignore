@@ -1,0 +1,10 @@
+# Zugangsdaten nie committen: n8n-Credential-Importe, lokale Env-Dateien
+cred*.json
+cred*.txt
+*.env
+.env*
+!.env.example
+
+# Lokale Laufzeitdaten
+node_modules/
+*.log

@@ -45,9 +45,11 @@ docker exec life-ops-n8n n8n import:workflow --input=/tmp/workflow.json
    `message.chat.id`.
 4. Credential per CLI anlegen (Token landet nicht im Klartext im Workflow-JSON):
    ```bash
-   echo '[{"id":"telegram-bewerbungshelfer","name":"Bewerbungshelfer Telegram Bot","type":"telegramApi","data":{"accessToken":"<TOKEN>"}}]' > cred.json
-   docker cp cred.json life-ops-n8n:/tmp/cred.json
+   tmp=$(mktemp)  # außerhalb des Repos, landet so nie in einem Commit
+   echo '[{"id":"telegram-bewerbungshelfer","name":"Bewerbungshelfer Telegram Bot","type":"telegramApi","data":{"accessToken":"<TOKEN>"}}]' > "$tmp"
+   docker cp "$tmp" life-ops-n8n:/tmp/cred.json
    docker exec life-ops-n8n n8n import:credentials --input=/tmp/cred.json
+   docker exec life-ops-n8n rm /tmp/cred.json; rm "$tmp"
    ```
 
 ### Getestet
@@ -144,9 +146,11 @@ docker exec life-ops-n8n n8n import:workflow --input=/tmp/workflow.json
   Credential **Bewerbungshelfer Telegram Bot** wiederverwendet (siehe oben).
 - **Credential "Langfuse Basic Auth"** (`langfuse-basic-auth`) per CLI anlegen:
   ```bash
-  echo '[{"id":"langfuse-basic-auth","name":"Langfuse Basic Auth","type":"httpBasicAuth","data":{"user":"<PUBLIC_KEY>","password":"<SECRET_KEY>"}}]' > cred.json
-  docker cp cred.json life-ops-n8n:/tmp/cred.json
+  tmp=$(mktemp)  # außerhalb des Repos, landet so nie in einem Commit
+  echo '[{"id":"langfuse-basic-auth","name":"Langfuse Basic Auth","type":"httpBasicAuth","data":{"user":"<PUBLIC_KEY>","password":"<SECRET_KEY>"}}]' > "$tmp"
+  docker cp "$tmp" life-ops-n8n:/tmp/cred.json
   docker exec life-ops-n8n n8n import:credentials --input=/tmp/cred.json
+  docker exec life-ops-n8n rm /tmp/cred.json; rm "$tmp"
   ```
 - Bei US-Region-Projekt die URL im "Langfuse Nutzung abfragen"-Node von
   `cloud.langfuse.com` auf `us.cloud.langfuse.com` ändern.
@@ -204,17 +208,21 @@ docker exec life-ops-n8n n8n import:workflow --input=/tmp/workflow.json
 - **Credential "n8n API Key"** (`n8n-api-key`, `httpHeaderAuth`): ein n8n-API-
   Key aus dem n8n-UI (Settings → n8n API), als `Authorization: Bearer <KEY>`.
   ```bash
-  echo '[{"id":"n8n-api-key","name":"n8n API Key","type":"httpHeaderAuth","data":{"name":"Authorization","value":"Bearer <KEY>"}}]' > cred.json
-  docker cp cred.json life-ops-n8n:/tmp/cred.json
+  tmp=$(mktemp)  # außerhalb des Repos, landet so nie in einem Commit
+  echo '[{"id":"n8n-api-key","name":"n8n API Key","type":"httpHeaderAuth","data":{"name":"Authorization","value":"Bearer <KEY>"}}]' > "$tmp"
+  docker cp "$tmp" life-ops-n8n:/tmp/cred.json
   docker exec life-ops-n8n n8n import:credentials --input=/tmp/cred.json
+  docker exec life-ops-n8n rm /tmp/cred.json; rm "$tmp"
   ```
 - **Credential "GitHub PAT (portfolio-page)"** (`github-portfolio-pat`,
   `httpHeaderAuth`): ein fein-granularer GitHub-PAT, nur für `portfolio-page`
   freigegeben, nur `Contents: Read and write`.
   ```bash
-  echo '[{"id":"github-portfolio-pat","name":"GitHub PAT (portfolio-page)","type":"httpHeaderAuth","data":{"name":"Authorization","value":"Bearer <PAT>"}}]' > cred.json
-  docker cp cred.json life-ops-n8n:/tmp/cred.json
+  tmp=$(mktemp)  # außerhalb des Repos, landet so nie in einem Commit
+  echo '[{"id":"github-portfolio-pat","name":"GitHub PAT (portfolio-page)","type":"httpHeaderAuth","data":{"name":"Authorization","value":"Bearer <PAT>"}}]' > "$tmp"
+  docker cp "$tmp" life-ops-n8n:/tmp/cred.json
   docker exec life-ops-n8n n8n import:credentials --input=/tmp/cred.json
+  docker exec life-ops-n8n rm /tmp/cred.json; rm "$tmp"
   ```
 - Geht davon aus, dass der n8n-Server selbst unter
   `http://host.docker.internal:5678` erreichbar ist - anders als bei den
